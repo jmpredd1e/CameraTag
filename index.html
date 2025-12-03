@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Laser Tag Camera</title>
+  <style>
+    body { 
+      margin: 0; 
+      overflow: hidden; 
+      background: black;
+      font-family: sans-serif;
+    }
+    #video {
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      display: none;
+    }
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 60px;
+      color: red;
+      pointer-events: none;
+      display: none;
+      text-shadow: 0 0 5px black;
+    }
+    #startBtn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 20px 40px;
+      font-size: 24px;
+      border-radius: 12px;
+      background: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    #startBtn:active {
+      background: #0056b3;
+    }
+    #message {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: white;
+      font-size: 16px;
+      text-align: center;
+      padding: 0 20px;
+      max-width: 90%;
+      background: rgba(0,0,0,0.7);
+      border-radius: 8px;
+      padding: 10px 20px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <video id="video" autoplay playsinline muted></video>
+  <div id="crosshair">+</div>
+  <button id="startBtn">Start Camera</button>
+  <div id="message"></div>
+
+  <script>
+    const message = document.getElementById("message");
+    
+    // Check HTTPS requirement
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+      message.innerHTML = "⚠️ Camera requires HTTPS.<br>Please use a secure connection or localhost.";
+      document.getElementById("startBtn").disabled = true;
+    }
+
+    async function startCamera() {
+      // Check if getUserMedia is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        message.innerText = "❌ Camera access is not supported on this device/browser.";
+        return;
+      }
+
+      // Detect if device is mobile or desktop
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+      // Choose facingMode based on device
+      const constraints = isMobile 
+        ? { video: { facingMode: { ideal: "environment" } } } // rear camera on phone
+        : { video: true }; // default webcam on desktop
+
+      try {
+        message.innerText = "📷 Requesting camera access...";
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        const video = document.getElementById("video");
+        video.srcObject = stream;
+        video.style.display = "block";
+        document.getElementById("crosshair").style.display = "block";
+        document.getElementById("startBtn").style.display = "none";
+        message.innerText = "";
+      } catch (err) {
+        console.error(err);
+        
+        // Provide specific error messages
+        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+          message.innerText = "❌ Camera permission denied. Please allow camera access in your browser settings.";
+        } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+          message.innerText = "❌ No camera found on this device.";
+        } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+          message.innerText = "❌ Camera is already in use by another app.";
+        } else if (err.name === "OverconstrainedError") {
+          message.innerText = "❌ Rear camera not available. Trying default camera...";
+          // Fallback to any available camera
+          setTimeout(() => retryWithDefaultCamera(), 2000);
+        } else {
+          message.innerText = `❌ Camera error: ${err.message}`;
+        }
+      }
+    }
+
+    async function retryWithDefaultCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const video = document.getElementById("video");
+        video.srcObject = stream;
+        video.style.display = "block";
+        document.getElementById("crosshair").style.display = "block";
+        document.getElementById("startBtn").style.display = "none";
+        message.innerText = "";
+      } catch (err) {
+        message.innerText = `❌ Could not access any camera: ${err.message}`;
+      }
+    }
+
+    document.getElementById("startBtn").addEventListener("click", startCamera);
+  </script>
+
+</body>
+</html>
