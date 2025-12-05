@@ -3,7 +3,7 @@ const message = document.getElementById("message");
 // ⚠️ IMPORTANT: Replace with your computer's local IP address
 // Find it by running: ipconfig (Windows) or ifconfig (Mac/Linux)
 // Example: 'http://192.168.1.100:5000'
-const SERVER_URL = '10.202.3.216:5000';
+const SERVER_URL = 'https://10.202.3.216:5000';
 
 let socket = null;
 let localShotCount = 0;
