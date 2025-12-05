@@ -2,6 +2,7 @@ from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 from datetime import datetime
+import os
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'laser-tag-secret'
@@ -66,9 +67,21 @@ if __name__ == '__main__':
     print("=" * 50)
     print("🚀 Laser Tag Socket.IO Server Starting...")
     print("=" * 50)
-    print("📡 Server running on http://0.0.0.0:5000")
-    print("📱 Connect from phone using your computer's IP address")
-    print("   Example: http://192.168.1.100:5000")
+    
+    # Check if SSL certificates exist
+    use_ssl = os.path.exists('cert.pem') and os.path.exists('key.pem')
+    
+    if use_ssl:
+        print("🔐 Running with HTTPS (SSL enabled)")
+        print("📡 Server running on https://0.0.0.0:5000")
+        print("📱 Connect from phone using: https://YOUR_IP:5000")
+    else:
+        print("⚠️  Running with HTTP (no SSL)")
+        print("📡 Server running on http://0.0.0.0:5000")
+        print("📱 Connect from phone using: http://YOUR_IP:5000")
+        print("")
+        print("💡 To enable HTTPS, run: bash setup_https.sh")
+    
     print("")
     print("To find your IP address:")
     print("  Mac/Linux: ifconfig | grep 'inet '")
@@ -77,4 +90,16 @@ if __name__ == '__main__':
     print("Press CTRL+C to stop")
     print("=" * 50)
     
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
+    if use_ssl:
+        socketio.run(app, 
+                    host='0.0.0.0', 
+                    port=5000, 
+                    debug=True, 
+                    allow_unsafe_werkzeug=True,
+                    ssl_context=('cert.pem', 'key.pem'))
+    else:
+        socketio.run(app, 
+                    host='0.0.0.0', 
+                    port=5000, 
+                    debug=True, 
+                    allow_unsafe_werkzeug=True)
