@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Laser Tag Controller</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            max-width: 400px;
+            width: 100%;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 5px;
+        }
+        
+        .status {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            font-size: 18px;
+        }
+        
+        .status-value {
+            font-weight: bold;
+            color: #4ecca3;
+        }
+        
+        .shoot-btn {
+            width: 100%;
+            height: 120px;
+            background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+            border: none;
+            border-radius: 20px;
+            color: white;
+            font-size: 32px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(255, 65, 108, 0.4);
+            transition: all 0.3s;
+            margin-bottom: 15px;
+            touch-action: manipulation;
+        }
+        
+        .shoot-btn:active {
+            transform: scale(0.95);
+            box-shadow: 0 5px 15px rgba(255, 65, 108, 0.6);
+        }
+        
+        .shoot-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        
+        .reload-btn {
+            width: 100%;
+            height: 60px;
+            background: rgba(255,255,255,0.2);
+            border: 2px solid white;
+            border-radius: 15px;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            touch-action: manipulation;
+            margin-bottom: 15px;
+        }
+        
+        .reload-btn:active {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .connection-status {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0,0,0,0.5);
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4ecca3;
+            box-shadow: 0 0 10px #4ecca3;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-dot.disconnected {
+            background: #ff4b2b;
+            box-shadow: 0 0 10px #ff4b2b;
+            animation: none;
+        }
+        
+        .status-dot.connecting {
+            background: #ffaa00;
+            box-shadow: 0 0 10px #ffaa00;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .message {
+            text-align: center;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.1);
+            animation: slideIn 0.3s;
+        }
+        
+        @keyframes slideIn {
+            from { 
+                opacity: 0; 
+                transform: translateY(-20px); 
+            }
+            to { 
+                opacity: 1; 
+                transform: translateY(0); 
+            }
+        }
+        
+        .player-name-input {
+            width: 100%;
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .player-name-input::placeholder {
+            color: rgba(255,255,255,0.6);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .stat-card {
+            background: rgba(255,255,255,0.05);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4ecca3;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status">
+        <div class="status-dot connecting" id="statusDot"></div>
+        <span id="statusText">Connecting...</span>
+    </div>
+    
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Laser Tag</h1>
+            <p>Player Controller</p>
+        </div>
+        
+        <input type="text" 
+               class="player-name-input" 
+               id="playerName" 
+               placeholder="Enter your name..."
+               maxlength="20">
+        
+        <div class="status">
+            <div class="status-item">
+                <span>Player:</span>
+                <span class="status-value" id="playerNameDisplay">Connecting...</span>
+            </div>
+            <div class="status-item">
+                <span>Ammo:</span>
+                <span class="status-value" id="ammo">30</span>
+            </div>
+            <div class="status-item">
+                <span>Health:</span>
+                <span class="status-value" id="health">100</span>
+            </div>
+            <div class="status-item">
+                <span>Players Online:</span>
+                <span class="status-value" id="playerCount">0</span>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="hits">0</div>
+                    <div class="stat-label">Hits</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="shotsFired">0</div>
+                    <div class="stat-label">Shots</div>
+                </div>
+            </div>
+        </div>
+        
+        <button class="shoot-btn" id="shootBtn" disabled>
+            🔫 SHOOT
+        </button>
+        
+        <button class="reload-btn" id="reloadBtn" disabled>
+            🔄 RELOAD
+        </button>
+        
+        <div id="messageArea"></div>
+    </div>
+
+    <script>
+        // Automatically connect to the correct server
+        // In development: connects to localhost
+        // In production: connects to your Render URL
+        const socket = io();
+        
+        let playerData = { 
+            ammo: 30, 
+            health: 100, 
+            name: 'Player',
+            hits: 0,
+            shots_fired: 0
+        };
+        
+        // Elements
+        const shootBtn = document.getElementById('shootBtn');
+        const reloadBtn = document.getElementById('reloadBtn');
+        const ammoDisplay = document.getElementById('ammo');
+        const healthDisplay = document.getElementById('health');
+        const playerNameDisplay = document.getElementById('playerNameDisplay');
+        const playerCountDisplay = document.getElementById('playerCount');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const messageArea = document.getElementById('messageArea');
+        const playerNameInput = document.getElementById('playerName');
+        const hitsDisplay = document.getElementById('hits');
+        const shotsFiredDisplay = document.getElementById('shotsFired');
+        
+        // Connection events
+        socket.on('connect', () => {
+            console.log('✅ Connected to server');
+            statusDot.className = 'status-dot';
+            statusText.textContent = 'Connected';
+            shootBtn.disabled = false;
+            reloadBtn.disabled = false;
+            showMessage('Connected to game server!', '#4ecca3');
+        });
+        
+        socket.on('disconnect', () => {
+            console.log('❌ Disconnected from server');
+            statusDot.className = 'status-dot disconnected';
+            statusText.textContent = 'Disconnected';
+            shootBtn.disabled = true;
+            reloadBtn.disabled = true;
+            showMessage('Lost connection to server', '#ff4b2b');
+        });
+        
+        // Receive player data
+        socket.on('player_data', (data) => {
+            playerData = data;
+            ammoDisplay.textContent = data.ammo;
+            healthDisplay.textContent = data.health;
+            playerNameDisplay.textContent = data.name;
+            hitsDisplay.textContent = data.hits || 0;
+            shotsFiredDisplay.textContent = data.shots_fired || 0;
+        });
+        
+        // Update ammo
+        socket.on('ammo_update', (data) => {
+            playerData.ammo = data.ammo;
+            ammoDisplay.textContent = data.ammo;
+            if (data.shots_fired !== undefined) {
+                playerData.shots_fired = data.shots_fired;
+                shotsFiredDisplay.textContent = data.shots_fired;
+            }
+        });
+        
+        // Update player count
+        socket.on('player_count', (data) => {
+            playerCountDisplay.textContent = data.count;
+        });
+        
+        // Out of ammo
+        socket.on('out_of_ammo', (data) => {
+            showMessage('⚠️ Out of Ammo! Reload!', '#ff4b2b');
+            navigator.vibrate && navigator.vibrate([200, 100, 200]);
+        });
+        
+        // Player shot event
+        socket.on('player_shot', (data) => {
+            if (data.shooter !== playerData.name) {
+                showMessage(`${data.shooter} fired!`, '#ffaa00');
+            }
+        });
+        
+        // Hit confirmed (you hit someone)
+        socket.on('hit_confirmed', (data) => {
+            showMessage(`💥 HIT! You tagged ${data.target}!`, '#4ecca3');
+            hitsDisplay.textContent = data.your_hits;
+            navigator.vibrate && navigator.vibrate([100, 50, 100, 50, 100]);
+        });
+        
+        // You were hit
+        socket.on('you_were_hit', (data) => {
+            showMessage(`❌ Tagged by ${data.shooter}!`, '#ff4b2b');
+            healthDisplay.textContent = data.your_health;
+            navigator.vibrate && navigator.vibrate([500]);
+            
+            // Flash screen red
+            document.body.style.background = 'linear-gradient(135deg, #ff0000 0%, #cc0000 100%)';
+            setTimeout(() => {
+                document.body.style.background = 'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)';
+            }, 300);
+        });
+        
+        // Hit event (broadcast to all)
+        socket.on('hit_event', (data) => {
+            if (data.shooter !== playerData.name && data.target !== playerData.name) {
+                showMessage(`${data.shooter} tagged ${data.target}!`, '#ffaa00');
+            }
+        });
+        
+        // Player eliminated
+        socket.on('player_eliminated', (data) => {
+            showMessage(`☠️ ${data.name} was eliminated by ${data.eliminated_by}!`, '#ff4b2b');
+        });
+        
+        // Shoot button
+        shootBtn.addEventListener('click', () => {
+            if (playerData.ammo > 0) {
+                // Send shoot event
+                socket.emit('shoot', {
+                    timestamp: Date.now(),
+                    // TODO: Add camera data here when CV is ready
+                    // camera_frame: getCameraFrame(),
+                    position: 'TODO: GPS/location data'
+                });
+                
+                // Visual feedback
+                shootBtn.style.transform = 'scale(0.95)';
+                setTimeout(() => shootBtn.style.transform = '', 100);
+                
+                // Haptic feedback
+                navigator.vibrate && navigator.vibrate(50);
+            }
+        });
+        
+        // Reload button
+        reloadBtn.addEventListener('click', () => {
+            socket.emit('reload');
+            showMessage('🔄 Reloading...', '#4ecca3');
+            navigator.vibrate && navigator.vibrate([100, 50, 100]);
+        });
+        
+        // Player name registration
+        playerNameInput.addEventListener('change', (e) => {
+            const name = e.target.value.trim();
+            if (name) {
+                socket.emit('register_player', { name: name });
+                showMessage(`Name changed to: ${name}`, '#4ecca3');
+            }
+        });
+        
+        // Show temporary message
+        function showMessage(text, color) {
+            const msg = document.createElement('div');
+            msg.className = 'message';
+            msg.textContent = text;
+            msg.style.borderLeft = `4px solid ${color}`;
+            messageArea.insertBefore(msg, messageArea.firstChild);
+            
+            // Remove old messages if too many
+            while (messageArea.children.length > 5) {
+                messageArea.lastChild.remove();
+            }
+            
+            setTimeout(() => {
+                msg.style.opacity = '0';
+                setTimeout(() => msg.remove(), 300);
+            }, 3000);
+        }
+        
+        // Prevent zoom on double-tap (iOS)
+        document.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 1) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+        
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', (e) => {
+            const now = Date.now();
+            if (now - lastTouchEnd <= 300) {
+                e.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, false);
+    </script>
+</body>
+</html>
