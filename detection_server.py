@@ -1,6 +1,7 @@
 """
 April Tag Detection Server for Laser Tag (Windows-compatible version)
 Receives images from phone, detects tags using OpenCV, returns tag IDs
+Optimized for Render.com deployment
 """
 
 from flask import Flask, request, jsonify
@@ -10,6 +11,7 @@ import numpy as np
 import cv2
 import base64
 from datetime import datetime
+import os
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'laser-tag-secret'
@@ -26,6 +28,114 @@ detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
 shot_count = 0
 connected_clients = 0
 player_registry = {}  # Maps player_id to tag_id
+
+@app.route('/')
+def home():
+    """Home route - displays server status"""
+    return '''
+    <html>
+    <head>
+        <title>Laser Tag Server</title>
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                text-align: center;
+                padding: 50px;
+                background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+                color: white;
+                margin: 0;
+                min-height: 100vh;
+            }
+            .container {
+                max-width: 600px;
+                margin: 0 auto;
+                background: rgba(255, 255, 255, 0.05);
+                padding: 40px;
+                border-radius: 20px;
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+            }
+            h1 {
+                color: #00ff88;
+                font-size: 48px;
+                margin-bottom: 10px;
+                text-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+            }
+            .status {
+                display: inline-block;
+                padding: 10px 20px;
+                background: rgba(0, 255, 136, 0.2);
+                border: 2px solid #00ff88;
+                border-radius: 50px;
+                font-weight: bold;
+                margin: 20px 0;
+            }
+            .info {
+                color: #888;
+                line-height: 1.8;
+                margin-top: 30px;
+            }
+            .stats {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 20px;
+                margin-top: 30px;
+            }
+            .stat-card {
+                background: rgba(0, 255, 136, 0.1);
+                padding: 20px;
+                border-radius: 10px;
+                border: 1px solid rgba(0, 255, 136, 0.3);
+            }
+            .stat-value {
+                font-size: 32px;
+                color: #00ff88;
+                font-weight: bold;
+            }
+            .stat-label {
+                color: #888;
+                font-size: 14px;
+                margin-top: 5px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🎯 Laser Tag Server</h1>
+            <div class="status">✅ Online</div>
+            
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="players">''' + str(len(player_registry)) + '''</div>
+                    <div class="stat-label">Registered Players</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="connected">''' + str(connected_clients) + '''</div>
+                    <div class="stat-label">Connected Clients</div>
+                </div>
+            </div>
+            
+            <div class="info">
+                <p><strong>Socket.IO Server</strong></p>
+                <p>April Tag Detection Enabled (DICT_APRILTAG_36h11)</p>
+                <p>OpenCV Version: ''' + cv2.__version__ + '''</p>
+                <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
+                <p>Connect your game client to start playing!</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
+
+@app.route('/health')
+def health():
+    """Health check endpoint for monitoring"""
+    return jsonify({
+        'status': 'healthy',
+        'connected_clients': connected_clients,
+        'registered_players': len(player_registry),
+        'timestamp': datetime.now().isoformat()
+    })
 
 @socketio.on('connect')
 def handle_connect():
@@ -268,12 +378,15 @@ def handle_reset_game():
     })
 
 if __name__ == '__main__':
+    # Get port from environment variable (Render uses PORT env var)
+    port = int(os.environ.get('PORT', 5000))
+    
     print("=" * 70)
     print("🚀 Laser Tag Detection Server with April Tags (OpenCV)")
     print("=" * 70)
-    print("📡 Server running on http://localhost:5000")
+    print(f"📡 Server running on port {port}")
     print("🏷️  April Tag detector initialized (DICT_APRILTAG_36h11)")
-    print("💻 Using OpenCV ArUco detector (Windows-compatible)")
+    print("💻 Using OpenCV ArUco detector")
     print("")
     print("Features:")
     print("  • April Tag detection from phone camera")
@@ -282,13 +395,10 @@ if __name__ == '__main__':
     print("  • Game state management")
     print("")
     print("⚠️  Note: Make sure you downloaded tag36h11 April Tags")
-    print("   These are different from standard ArUco markers")
-    print("")
-    print("Press CTRL+C to stop")
     print("=" * 70)
     
     socketio.run(app, 
                 host='0.0.0.0', 
-                port=5000, 
-                debug=True, 
+                port=port, 
+                debug=False,  # Set to False for production
                 allow_unsafe_werkzeug=True)
