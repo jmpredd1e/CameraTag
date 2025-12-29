@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Laser Tag Controller</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <!-- Welcome Screen -->
@@ -37,6 +37,35 @@
         </div>
     </div>
 
+    <!-- Calibration Screen -->
+    <div id="calibrationScreen" class="screen">
+        <div class="container">
+            <div class="header">
+                <h1>🏷️ Calibration</h1>
+                <p>Register Your Tag</p>
+            </div>
+            
+            <div class="calibration-card">
+                <h2>Scan Your April Tag</h2>
+                
+                <div class="camera-container">
+                    <video id="calibrationVideo" autoplay playsinline></video>
+                    <div class="camera-overlay">
+                        <div class="scan-frame"></div>
+                    </div>
+                </div>
+                
+                <button class="primary-btn" id="calibrateBtn">
+                    📸 Scan My Tag
+                </button>
+                
+                <p class="info-text" id="calibrationMessage">
+                    Hold your April Tag in front of the camera and click Scan
+                </p>
+            </div>
+        </div>
+    </div>
+
     <!-- Game Screen -->
     <div id="gameScreen" class="screen">
         <div class="connection-status">
@@ -58,6 +87,10 @@
                 <div class="status-item">
                     <span>Player:</span>
                     <span class="status-value" id="playerNameDisplay">Loading...</span>
+                </div>
+                <div class="status-item">
+                    <span>Tag ID:</span>
+                    <span class="status-value" id="tagId">-</span>
                 </div>
                 <div class="status-item">
                     <span>Ammo:</span>
@@ -97,6 +130,6 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script src="script.js"></script>
 </body>
 </html>

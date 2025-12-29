@@ -1,260 +1,326 @@
-// ========== Global Variables ==========
-let socket;
+// ⚠️ IMPORTANT: Replace with your computer's local IP address
+const SERVER_URL = 'https://cameratag.onrender.com';
+
+let socket = null;
+let playerId = null;
+let playerName = null;
+let playerTagId = null;
+let isCalibrated = false;
+let ammoCount = 30;
+let healthCount = 100;
+let hitsCount = 0;
+let shotsFiredCount = 0;
 let cameraStream = null;
-let playerData = { 
-    ammo: 30, 
-    health: 100, 
-    name: 'Player',
-    hits: 0,
-    shots_fired: 0
-};
 
-// ========== Screen Management ==========
-const welcomeScreen = document.getElementById('welcomeScreen');
-const gameScreen = document.getElementById('gameScreen');
-const playerNameSetup = document.getElementById('playerNameSetup');
-const requestCameraBtn = document.getElementById('requestCameraBtn');
+// Screen management
+function showScreen(screenId) {
+    document.querySelectorAll('.screen').forEach(screen => {
+        screen.classList.remove('active');
+    });
+    document.getElementById(screenId).classList.add('active');
+}
 
-// ========== Game Screen Elements ==========
-const shootBtn = document.getElementById('shootBtn');
-const reloadBtn = document.getElementById('reloadBtn');
-const cameraView = document.getElementById('cameraView');
-const ammoDisplay = document.getElementById('ammo');
-const healthDisplay = document.getElementById('health');
-const playerNameDisplay = document.getElementById('playerNameDisplay');
-const playerCountDisplay = document.getElementById('playerCount');
-const statusDot = document.getElementById('statusDot');
-const statusText = document.getElementById('statusText');
-const messageArea = document.getElementById('messageArea');
-const hitsDisplay = document.getElementById('hits');
-const shotsFiredDisplay = document.getElementById('shotsFired');
-
-// ========== Welcome Screen - Camera Permission ==========
-requestCameraBtn.addEventListener('click', async () => {
-    const playerName = playerNameSetup.value.trim();
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Generate unique player ID
+    playerId = 'player_' + Math.random().toString(36).substr(2, 9);
     
-    if (!playerName) {
-        alert('Please enter your name first!');
+    // Welcome screen button
+    document.getElementById('requestCameraBtn').addEventListener('click', async function() {
+        const nameInput = document.getElementById('playerNameSetup');
+        playerName = nameInput.value.trim() || 'Player' + Math.floor(Math.random() * 1000);
+        
+        // Request camera access
+        try {
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            const constraints = isMobile 
+                ? { video: { facingMode: { ideal: "environment" } } }
+                : { video: true };
+            
+            cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+            
+            // Show calibration screen
+            showScreen('calibrationScreen');
+            
+            // Set up calibration video
+            const calibrationVideo = document.getElementById('calibrationVideo');
+            calibrationVideo.srcObject = cameraStream;
+            
+            // Connect to server
+            initializeSocket();
+            
+        } catch (err) {
+            alert('Camera access denied. Please allow camera access and try again.');
+            console.error('Camera error:', err);
+        }
+    });
+    
+    // Calibration button
+    document.getElementById('calibrateBtn').addEventListener('click', calibrateTag);
+    
+    // Shoot button
+    document.getElementById('shootBtn').addEventListener('click', shootLaser);
+    
+    // Reload button
+    document.getElementById('reloadBtn').addEventListener('click', reloadWeapon);
+});
+
+function initializeSocket() {
+    socket = io(SERVER_URL, {
+        transports: ['websocket', 'polling']
+    });
+    
+    socket.on('connect', function() {
+        console.log('✅ Connected to server');
+        updateConnectionStatus('connected', 'Connected');
+    });
+    
+    socket.on('disconnect', function() {
+        console.log('❌ Disconnected from server');
+        updateConnectionStatus('disconnected', 'Disconnected');
+    });
+    
+    socket.on('connect_error', function(error) {
+        console.error('Connection error:', error);
+        updateConnectionStatus('error', 'Connection Error');
+    });
+    
+    socket.on('connection_status', function(data) {
+        console.log('Server status:', data.message);
+    });
+    
+    socket.on('detection_result', function(data) {
+        handleDetectionResult(data);
+    });
+    
+    socket.on('registration_result', function(data) {
+        handleRegistrationResult(data);
+    });
+    
+    socket.on('shot_confirmed', function(data) {
+        handleShotConfirmed(data);
+    });
+    
+    socket.on('player_hit', function(data) {
+        if (data.player_id === playerId) {
+            handlePlayerHit(data);
+        }
+    });
+    
+    socket.on('reload', function(data) {
+        showMessage('🔄 RELOAD TIME!', 'warning');
+    });
+    
+    socket.on('game_reset', function(data) {
+        resetGame();
+    });
+}
+
+async function calibrateTag() {
+    const calibrateBtn = document.getElementById('calibrateBtn');
+    const calibrationMessage = document.getElementById('calibrationMessage');
+    
+    calibrateBtn.disabled = true;
+    calibrateBtn.innerText = '📸 SCANNING...';
+    calibrationMessage.innerText = 'Detecting tag...';
+    
+    try {
+        const video = document.getElementById('calibrationVideo');
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+        
+        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+        
+        socket.emit('detect_tag', {
+            image: imageData,
+            player_id: playerId,
+            calibration: true
+        });
+        
+    } catch (err) {
+        console.error('Calibration error:', err);
+        calibrationMessage.innerText = '❌ Error capturing image. Try again.';
+        calibrateBtn.disabled = false;
+        calibrateBtn.innerText = '📸 Scan My Tag';
+    }
+}
+
+function handleDetectionResult(data) {
+    if (data.success && data.detections.length > 0) {
+        const tag = data.detections[0];
+        
+        if (!isCalibrated) {
+            // Register player with this tag
+            socket.emit('register_player', {
+                player_id: playerId,
+                player_name: playerName,
+                tag_id: tag.id
+            });
+        } else {
+            // This is a shot
+            socket.emit('shoot', {
+                player_id: playerId,
+                tag_id: tag.id
+            });
+        }
+    } else {
+        if (!isCalibrated) {
+            const calibrationMessage = document.getElementById('calibrationMessage');
+            calibrationMessage.innerText = '❌ No tag detected. Hold tag flat and try again.';
+            document.getElementById('calibrateBtn').disabled = false;
+            document.getElementById('calibrateBtn').innerText = '📸 Scan My Tag';
+        } else {
+            showMessage('❌ No target detected', 'error');
+            document.getElementById('shootBtn').disabled = false;
+        }
+    }
+}
+
+function handleRegistrationResult(data) {
+    if (data.success) {
+        isCalibrated = true;
+        playerTagId = data.player_data.tag_id;
+        
+        // Move to game screen
+        showScreen('gameScreen');
+        
+        // Set up game video
+        const gameVideo = document.getElementById('cameraView');
+        gameVideo.srcObject = cameraStream;
+        
+        // Update UI
+        document.getElementById('playerNameDisplay').innerText = playerName;
+        document.getElementById('tagId').innerText = playerTagId;
+        document.getElementById('shootBtn').disabled = false;
+        document.getElementById('reloadBtn').disabled = false;
+        
+        showMessage(`✅ Calibrated! Tag ID: ${playerTagId}`, 'success');
+        
+    } else {
+        const calibrationMessage = document.getElementById('calibrationMessage');
+        calibrationMessage.innerText = `❌ ${data.error}`;
+        document.getElementById('calibrateBtn').disabled = false;
+        document.getElementById('calibrateBtn').innerText = '📸 Scan My Tag';
+    }
+}
+
+async function shootLaser() {
+    if (ammoCount <= 0) {
+        showMessage('❌ Out of ammo! Reload first', 'error');
         return;
     }
     
-    try {
-        // Request camera access
-        cameraStream = await navigator.mediaDevices.getUserMedia({ 
-            video: { 
-                facingMode: 'environment', // Use back camera on mobile
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            } 
-        });
-        
-        // Camera access granted - switch to game screen
-        playerData.name = playerName;
-        welcomeScreen.classList.remove('active');
-        gameScreen.classList.add('active');
-        
-        // Setup camera view
-        cameraView.srcObject = cameraStream;
-        
-        // Connect to server
-        initializeSocket();
-        
-    } catch (error) {
-        console.error('Camera access error:', error);
-        
-        if (error.name === 'NotAllowedError') {
-            alert('Camera access denied. Please allow camera access in your browser settings and refresh the page.');
-        } else if (error.name === 'NotFoundError') {
-            alert('No camera found on this device.');
-        } else {
-            alert('Error accessing camera: ' + error.message);
-        }
+    if (healthCount <= 0) {
+        showMessage('💀 You are eliminated!', 'error');
+        return;
     }
-});
-
-// ========== Socket.IO Connection ==========
-function initializeSocket() {
-    socket = io();
     
-    // Connection events
-    socket.on('connect', () => {
-        console.log('✅ Connected to server');
-        statusDot.className = 'status-dot';
-        statusText.textContent = 'Connected';
-        shootBtn.disabled = false;
-        reloadBtn.disabled = false;
-        showMessage('Connected to game server!', '#4ecca3');
-        
-        // Register player name
-        socket.emit('register_player', { name: playerData.name });
-    });
+    const shootBtn = document.getElementById('shootBtn');
+    shootBtn.disabled = true;
+    shootBtn.innerText = '🔍 DETECTING...';
     
-    socket.on('disconnect', () => {
-        console.log('❌ Disconnected from server');
-        statusDot.className = 'status-dot disconnected';
-        statusText.textContent = 'Disconnected';
-        shootBtn.disabled = true;
-        reloadBtn.disabled = true;
-        showMessage('Lost connection to server', '#ff4b2b');
-    });
-    
-    // Receive player data
-    socket.on('player_data', (data) => {
-        playerData = data;
-        updateUI();
-    });
-    
-    // Update ammo
-    socket.on('ammo_update', (data) => {
-        playerData.ammo = data.ammo;
-        if (data.shots_fired !== undefined) {
-            playerData.shots_fired = data.shots_fired;
-        }
-        updateUI();
-    });
-    
-    // Update player count
-    socket.on('player_count', (data) => {
-        playerCountDisplay.textContent = data.count;
-    });
-    
-    // Out of ammo
-    socket.on('out_of_ammo', (data) => {
-        showMessage('⚠️ Out of Ammo! Reload!', '#ff4b2b');
-        vibrate([200, 100, 200]);
-    });
-    
-    // Player shot event
-    socket.on('player_shot', (data) => {
-        if (data.shooter !== playerData.name) {
-            showMessage(`${data.shooter} fired!`, '#ffaa00');
-        }
-    });
-    
-    // Hit confirmed (you hit someone)
-    socket.on('hit_confirmed', (data) => {
-        showMessage(`💥 HIT! You tagged ${data.target}!`, '#4ecca3');
-        playerData.hits = data.your_hits;
-        hitsDisplay.textContent = data.your_hits;
-        vibrate([100, 50, 100, 50, 100]);
-    });
-    
-    // You were hit
-    socket.on('you_were_hit', (data) => {
-        showMessage(`❌ Tagged by ${data.shooter}!`, '#ff4b2b');
-        playerData.health = data.your_health;
-        healthDisplay.textContent = data.your_health;
-        vibrate([500]);
-        
-        // Flash screen red
-        document.body.style.background = 'linear-gradient(135deg, #ff0000 0%, #cc0000 100%)';
-        setTimeout(() => {
-            document.body.style.background = 'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)';
-        }, 300);
-    });
-    
-    // Hit event (broadcast to all)
-    socket.on('hit_event', (data) => {
-        if (data.shooter !== playerData.name && data.target !== playerData.name) {
-            showMessage(`${data.shooter} tagged ${data.target}!`, '#ffaa00');
-        }
-    });
-    
-    // Player eliminated
-    socket.on('player_eliminated', (data) => {
-        showMessage(`☠️ ${data.name} was eliminated by ${data.eliminated_by}!`, '#ff4b2b');
-    });
-}
-
-// ========== Shoot Button ==========
-shootBtn.addEventListener('click', () => {
-    if (playerData.ammo > 0) {
-        // Get camera frame (for future CV detection)
+    try {
+        const video = document.getElementById('cameraView');
         const canvas = document.createElement('canvas');
-        canvas.width = cameraView.videoWidth;
-        canvas.height = cameraView.videoHeight;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(cameraView, 0, 0);
+        ctx.drawImage(video, 0, 0);
+        
         const imageData = canvas.toDataURL('image/jpeg', 0.8);
         
-        // Send shoot event to server
-        socket.emit('shoot', {
-            timestamp: Date.now(),
-            camera_frame: imageData, // Send camera frame for CV detection
-            position: 'TODO: GPS/location data'
+        socket.emit('detect_tag', {
+            image: imageData,
+            player_id: playerId
         });
         
-        // Visual feedback
-        shootBtn.style.transform = 'scale(0.95)';
-        setTimeout(() => shootBtn.style.transform = '', 100);
+        // Update ammo
+        ammoCount--;
+        shotsFiredCount++;
+        updateStats();
         
-        // Haptic feedback
-        vibrate(50);
-    }
-});
-
-// ========== Reload Button ==========
-reloadBtn.addEventListener('click', () => {
-    socket.emit('reload', {});
-    showMessage('🔄 Reloading...', '#4ecca3');
-    vibrate([100, 50, 100]);
-});
-
-// ========== Helper Functions ==========
-function updateUI() {
-    ammoDisplay.textContent = playerData.ammo;
-    healthDisplay.textContent = playerData.health;
-    playerNameDisplay.textContent = playerData.name;
-    hitsDisplay.textContent = playerData.hits || 0;
-    shotsFiredDisplay.textContent = playerData.shots_fired || 0;
-}
-
-function showMessage(text, color) {
-    const msg = document.createElement('div');
-    msg.className = 'message';
-    msg.textContent = text;
-    msg.style.borderLeft = `4px solid ${color}`;
-    messageArea.insertBefore(msg, messageArea.firstChild);
-    
-    // Remove old messages if too many
-    while (messageArea.children.length > 5) {
-        messageArea.lastChild.remove();
+    } catch (err) {
+        console.error('Shoot error:', err);
+        showMessage('❌ Error capturing image', 'error');
     }
     
     setTimeout(() => {
-        msg.style.opacity = '0';
-        setTimeout(() => msg.remove(), 300);
+        shootBtn.disabled = false;
+        shootBtn.innerText = '🔫 SHOOT';
+    }, 1000);
+}
+
+function handleShotConfirmed(data) {
+    if (data.hit_player) {
+        hitsCount++;
+        updateStats();
+        showMessage(`🎯 HIT ${data.hit_player}!`, 'success');
+    } else {
+        showMessage(`📍 Tag ${data.tag_id} detected (not registered)`, 'info');
+    }
+}
+
+function handlePlayerHit(data) {
+    healthCount -= 25;
+    updateStats();
+    
+    showMessage(`💥 HIT by ${data.shooter_id}!`, 'error');
+    
+    // Flash screen red
+    document.getElementById('cameraView').style.filter = 'hue-rotate(90deg) brightness(0.7)';
+    setTimeout(() => {
+        document.getElementById('cameraView').style.filter = 'none';
+    }, 500);
+    
+    if (healthCount <= 0) {
+        document.getElementById('shootBtn').disabled = true;
+        document.getElementById('cameraView').style.filter = 'grayscale(100%) brightness(0.5)';
+        showMessage('💀 YOU ARE ELIMINATED!', 'error');
+    }
+}
+
+function reloadWeapon() {
+    ammoCount = 30;
+    updateStats();
+    showMessage('🔄 Reloaded!', 'success');
+}
+
+function updateStats() {
+    document.getElementById('ammo').innerText = ammoCount;
+    document.getElementById('health').innerText = healthCount;
+    document.getElementById('hits').innerText = hitsCount;
+    document.getElementById('shotsFired').innerText = shotsFiredCount;
+}
+
+function updateConnectionStatus(status, text) {
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    
+    statusDot.className = 'status-dot ' + status;
+    statusText.innerText = text;
+}
+
+function showMessage(text, type = 'info') {
+    const messageArea = document.getElementById('messageArea');
+    messageArea.innerText = text;
+    messageArea.className = 'message ' + type;
+    messageArea.style.display = 'block';
+    
+    setTimeout(() => {
+        messageArea.style.display = 'none';
     }, 3000);
 }
 
-function vibrate(pattern) {
-    if (navigator.vibrate) {
-        navigator.vibrate(pattern);
-    }
+function resetGame() {
+    healthCount = 100;
+    ammoCount = 30;
+    hitsCount = 0;
+    shotsFiredCount = 0;
+    updateStats();
+    document.getElementById('shootBtn').disabled = false;
+    document.getElementById('cameraView').style.filter = 'none';
+    showMessage('🎮 Game Reset!', 'success');
 }
-
-// ========== Cleanup on page unload ==========
-window.addEventListener('beforeunload', () => {
-    if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
-    }
-    if (socket) {
-        socket.disconnect();
-    }
-});
-
-// ========== Prevent zoom on iOS ==========
-document.addEventListener('touchstart', (e) => {
-    if (e.touches.length > 1) {
-        e.preventDefault();
-    }
-}, { passive: false });
-
-let lastTouchEnd = 0;
-document.addEventListener('touchend', (e) => {
-    const now = Date.now();
-    if (now - lastTouchEnd <= 300) {
-        e.preventDefault();
-    }
-    lastTouchEnd = now;
-}, false);
