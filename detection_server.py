@@ -4,7 +4,7 @@ Receives images from phone, detects tags using OpenCV, returns tag IDs
 Optimized for Render.com deployment
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 import numpy as np
@@ -31,11 +31,16 @@ player_registry = {}  # Maps player_id to tag_id
 
 @app.route('/')
 def home():
-    """Home route - displays server status"""
+    """Home route - serves the game interface from templates folder"""
+    return render_template('index.html')
+
+@app.route('/status')
+def status():
+    """Server status page"""
     return '''
     <html>
     <head>
-        <title>Laser Tag Server</title>
+        <title>Laser Tag Server Status</title>
         <style>
             body {
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -120,7 +125,7 @@ def home():
                 <p>April Tag Detection Enabled (DICT_APRILTAG_36h11)</p>
                 <p>OpenCV Version: ''' + cv2.__version__ + '''</p>
                 <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
-                <p>Connect your game client to start playing!</p>
+                <p><a href="/" style="color: #00ff88;">Go to Game →</a></p>
             </div>
         </div>
     </body>
