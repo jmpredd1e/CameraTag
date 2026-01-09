@@ -8,7 +8,6 @@
     <title>Laser Tag Controller</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.js"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </head>
 <body>
     <!-- Welcome Screen -->
@@ -63,6 +62,135 @@
                 <p class="info-text" id="calibrationMessage">
                     Hold your April Tag in front of the camera and click Scan
                 </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lobby Menu Screen - NEW! -->
+    <div id="lobbyMenuScreen" class="screen">
+        <div class="container">
+            <div class="header">
+                <h1>🎮 Game Lobby</h1>
+                <p>Choose Your Option</p>
+            </div>
+            
+            <div class="lobby-menu-card">
+                <div class="player-info">
+                    <h3>👤 <span id="lobbyPlayerName">Player</span></h3>
+                    <p>Tag ID: <span id="lobbyTagId">-</span></p>
+                </div>
+                
+                <button class="primary-btn" id="hostGameBtn">
+                    🏠 Host a Game
+                </button>
+                
+                <div class="divider">
+                    <span>OR</span>
+                </div>
+                
+                <button class="secondary-btn" id="joinGameBtn">
+                    🚪 Join a Game
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Join Game Screen - NEW! -->
+    <div id="joinGameScreen" class="screen">
+        <div class="container">
+            <div class="header">
+                <h1>🚪 Join Game</h1>
+                <p>Enter Room Code</p>
+            </div>
+            
+            <div class="join-card">
+                <h2>Enter 4-Letter Code</h2>
+                
+                <input type="text" 
+                       class="code-input" 
+                       id="roomCodeInput" 
+                       placeholder="ABCD"
+                       maxlength="4">
+                
+                <button class="primary-btn" id="joinRoomBtn">
+                    Join Room
+                </button>
+                
+                <button class="back-btn" id="backToLobbyFromJoin">
+                    ← Back
+                </button>
+                
+                <p class="info-text" id="joinMessage"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Host Game Screen - NEW! -->
+    <div id="hostGameScreen" class="screen">
+        <div class="container">
+            <div class="header">
+                <h1>🏠 Host Game</h1>
+                <p>Waiting for Players</p>
+            </div>
+            
+            <div class="host-card">
+                <div class="room-code-display">
+                    <h2>Room Code</h2>
+                    <div class="room-code" id="roomCodeDisplay">----</div>
+                    <p class="info-text">Share this code with other players</p>
+                </div>
+                
+                <div class="players-list">
+                    <h3>Players in Lobby (<span id="playerCountLobby">0</span>)</h3>
+                    <div id="playersListContainer">
+                        <!-- Players will be added here dynamically -->
+                    </div>
+                </div>
+                
+                <button class="primary-btn" id="startGameBtn" disabled>
+                    ▶️ Start Game
+                </button>
+                
+                <button class="danger-btn" id="cancelHostBtn">
+                    ✕ Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Waiting Room Screen - NEW! -->
+    <div id="waitingRoomScreen" class="screen">
+        <div class="container">
+            <div class="header">
+                <h1>⏳ Waiting Room</h1>
+                <p>Waiting for host to start</p>
+            </div>
+            
+            <div class="waiting-card">
+                <div class="room-code-display">
+                    <h2>Room Code</h2>
+                    <div class="room-code" id="waitingRoomCode">----</div>
+                </div>
+                
+                <div class="players-list">
+                    <h3>Players (<span id="waitingPlayerCount">0</span>)</h3>
+                    <div id="waitingPlayersListContainer">
+                        <!-- Players will be added here dynamically -->
+                    </div>
+                </div>
+                
+                <div class="waiting-status">
+                    <div class="loading-dots">
+                        <span>●</span>
+                        <span>●</span>
+                        <span>●</span>
+                    </div>
+                    <p>Waiting for host to start the game...</p>
+                </div>
+                
+                <button class="danger-btn" id="leaveRoomBtn">
+                    ← Leave Room
+                </button>
             </div>
         </div>
     </div>

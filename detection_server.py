@@ -4,6 +4,10 @@ Receives images from phone, detects tags using OpenCV, returns tag IDs
 Optimized for Render.com deployment
 """
 
+# IMPORTANT: eventlet must be patched BEFORE any other imports
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, request, jsonify, render_template
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
@@ -28,6 +32,16 @@ detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
 shot_count = 0
 connected_clients = 0
 player_registry = {}  # Maps player_id to tag_id
+game_rooms = {}  # Maps room_code to room data
+
+def generate_room_code():
+    """Generate a random 4-letter room code"""
+    import random
+    import string
+    while True:
+        code = ''.join(random.choices(string.ascii_uppercase, k=4))
+        if code not in game_rooms:
+            return code
 
 @app.route('/')
 def home():
@@ -229,6 +243,200 @@ def handle_detect_tag(data):
             'error': str(e)
         })
 
+@socketio.on('create_room')
+def handle_create_room(data):
+    """
+    Create a new game room
+    
+    Expected data:
+    {
+        'player_id': 'player_123',
+        'player_name': 'John'
+    }
+    """
+    player_id = data.get('player_id')
+    player_name = data.get('player_name')
+    
+    if not player_id or not player_name:
+        emit('room_error', {'error': 'Missing player information'})
+        return
+    
+    # Generate unique room code
+    room_code = generate_room_code()
+    
+    # Create room
+    game_rooms[room_code] = {
+        'code': room_code,
+        'host_id': player_id,
+        'host_name': player_name,
+        'players': {
+            player_id: {
+                'name': player_name,
+                'tag_id': player_registry.get(player_id, {}).get('tag_id'),
+                'ready': False
+            }
+        },
+        'status': 'waiting',  # waiting, playing, finished
+        'created_at': datetime.now().isoformat()
+    }
+    
+    print(f"🎮 Room {room_code} created by {player_name}")
+    
+    # Join the Socket.IO room
+    from flask_socketio import join_room
+    join_room(room_code)
+    
+    emit('room_created', {
+        'room_code': room_code,
+        'host_id': player_id,
+        'players': game_rooms[room_code]['players']
+    })
+
+@socketio.on('join_room')
+def handle_join_room(data):
+    """
+    Join an existing game room
+    
+    Expected data:
+    {
+        'player_id': 'player_123',
+        'player_name': 'John',
+        'room_code': 'ABCD'
+    }
+    """
+    player_id = data.get('player_id')
+    player_name = data.get('player_name')
+    room_code = data.get('room_code', '').upper()
+    
+    if not all([player_id, player_name, room_code]):
+        emit('room_error', {'error': 'Missing required information'})
+        return
+    
+    # Check if room exists
+    if room_code not in game_rooms:
+        emit('room_error', {'error': 'Room not found. Check the code and try again.'})
+        return
+    
+    room = game_rooms[room_code]
+    
+    # Check if game already started
+    if room['status'] == 'playing':
+        emit('room_error', {'error': 'Game already in progress'})
+        return
+    
+    # Join the Socket.IO room
+    from flask_socketio import join_room as socketio_join_room
+    socketio_join_room(room_code)
+    
+    # Add player to room
+    room['players'][player_id] = {
+        'name': player_name,
+        'tag_id': player_registry.get(player_id, {}).get('tag_id'),
+        'ready': False
+    }
+    
+    print(f"👤 {player_name} joined room {room_code}")
+    
+    # Notify player they joined
+    emit('room_joined', {
+        'room_code': room_code,
+        'host_id': room['host_id'],
+        'players': room['players']
+    })
+    
+    # Broadcast to all players in room (including the one who just joined)
+    socketio.emit('room_updated', {
+        'room_code': room_code,
+        'players': room['players']
+    }, room=room_code)
+
+@socketio.on('get_room_status')
+def handle_get_room_status(data):
+    """Get current room status"""
+    room_code = data.get('room_code', '').upper()
+    
+    if room_code not in game_rooms:
+        emit('room_error', {'error': 'Room not found'})
+        return
+    
+    room = game_rooms[room_code]
+    emit('room_status', {
+        'room_code': room_code,
+        'host_id': room['host_id'],
+        'players': room['players'],
+        'status': room['status']
+    })
+
+@socketio.on('start_game')
+def handle_start_game(data):
+    """
+    Start the game (host only)
+    
+    Expected data:
+    {
+        'room_code': 'ABCD',
+        'player_id': 'player_123'  # Must be host
+    }
+    """
+    room_code = data.get('room_code', '').upper()
+    player_id = data.get('player_id')
+    
+    if room_code not in game_rooms:
+        emit('room_error', {'error': 'Room not found'})
+        return
+    
+    room = game_rooms[room_code]
+    
+    # Check if player is host
+    if room['host_id'] != player_id:
+        emit('room_error', {'error': 'Only the host can start the game'})
+        return
+    
+    # Check if at least 2 players
+    if len(room['players']) < 2:
+        emit('room_error', {'error': 'Need at least 2 players to start'})
+        return
+    
+    # Start game
+    room['status'] = 'playing'
+    
+    print(f"🎮 Game started in room {room_code}")
+    
+    # Notify all players in room
+    socketio.emit('game_started', {
+        'room_code': room_code,
+        'players': room['players']
+    }, room=room_code)
+
+@socketio.on('leave_room')
+def handle_leave_room(data):
+    """Leave a game room"""
+    room_code = data.get('room_code', '').upper()
+    player_id = data.get('player_id')
+    
+    if room_code not in game_rooms:
+        return
+    
+    room = game_rooms[room_code]
+    
+    # Remove player from room
+    if player_id in room['players']:
+        player_name = room['players'][player_id]['name']
+        del room['players'][player_id]
+        print(f"👋 {player_name} left room {room_code}")
+    
+    # If host left or room empty, delete room
+    if player_id == room['host_id'] or len(room['players']) == 0:
+        print(f"🗑️  Room {room_code} deleted")
+        del game_rooms[room_code]
+        socketio.emit('room_closed', {'room_code': room_code}, room=room_code)
+    else:
+        # Notify remaining players
+        socketio.emit('room_updated', {
+            'room_code': room_code,
+            'players': room['players']
+        }, room=room_code)
+
 @socketio.on('register_player')
 def handle_register_player(data):
     """
@@ -398,6 +606,7 @@ if __name__ == '__main__':
     print("  • Player registration with tags")
     print("  • Hit detection and tracking")
     print("  • Game state management")
+    print("  • Game rooms with join codes")
     print("")
     print("⚠️  Note: Make sure you downloaded tag36h11 April Tags")
     print("=" * 70)
@@ -405,5 +614,5 @@ if __name__ == '__main__':
     socketio.run(app, 
                 host='0.0.0.0', 
                 port=port, 
-                debug=False,  # Set to False for production
-                allow_unsafe_werkzeug=True)
+                debug=True,  # Enable debug for development
+                log_output=True)

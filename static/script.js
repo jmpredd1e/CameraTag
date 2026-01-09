@@ -1,5 +1,5 @@
 // ⚠️ IMPORTANT: Replace with your computer's local IP address
-const SERVER_URL = 'https://cameratag.onrender.com';
+const SERVER_URL = 'http://localhost:5000';
 
 let socket = null;
 let playerId = null;
@@ -58,6 +58,21 @@ document.addEventListener('DOMContentLoaded', function() {
     // Calibration button
     document.getElementById('calibrateBtn').addEventListener('click', calibrateTag);
     
+    // Lobby menu buttons
+    document.getElementById('hostGameBtn').addEventListener('click', hostGame);
+    document.getElementById('joinGameBtn').addEventListener('click', () => showScreen('joinGameScreen'));
+    
+    // Join game buttons
+    document.getElementById('joinRoomBtn').addEventListener('click', joinRoom);
+    document.getElementById('backToLobbyFromJoin').addEventListener('click', () => showScreen('lobbyMenuScreen'));
+    
+    // Host game buttons
+    document.getElementById('startGameBtn').addEventListener('click', startGame);
+    document.getElementById('cancelHostBtn').addEventListener('click', cancelHost);
+    
+    // Waiting room button
+    document.getElementById('leaveRoomBtn').addEventListener('click', leaveRoom);
+    
     // Shoot button
     document.getElementById('shootBtn').addEventListener('click', shootLaser);
     
@@ -113,6 +128,37 @@ function initializeSocket() {
     
     socket.on('game_reset', function(data) {
         resetGame();
+    });
+    
+    // Room events
+    socket.on('room_created', function(data) {
+        console.log('Room created event received:', data);
+        handleRoomCreated(data);
+    });
+    
+    socket.on('room_joined', function(data) {
+        console.log('Room joined event received:', data);
+        handleRoomJoined(data);
+    });
+    
+    socket.on('room_updated', function(data) {
+        console.log('Room updated event received:', data);
+        handleRoomUpdated(data);
+    });
+    
+    socket.on('room_error', function(data) {
+        console.log('Room error event received:', data);
+        handleRoomError(data);
+    });
+    
+    socket.on('game_started', function(data) {
+        console.log('Game started event received:', data);
+        handleGameStarted(data);
+    });
+    
+    socket.on('room_closed', function(data) {
+        console.log('Room closed event received:', data);
+        handleRoomClosed(data);
     });
 }
 
@@ -184,20 +230,12 @@ function handleRegistrationResult(data) {
         isCalibrated = true;
         playerTagId = data.player_data.tag_id;
         
-        // Move to game screen
-        showScreen('gameScreen');
+        // Move to lobby menu instead of game screen
+        showScreen('lobbyMenuScreen');
         
-        // Set up game video
-        const gameVideo = document.getElementById('cameraView');
-        gameVideo.srcObject = cameraStream;
-        
-        // Update UI
-        document.getElementById('playerNameDisplay').innerText = playerName;
-        document.getElementById('tagId').innerText = playerTagId;
-        document.getElementById('shootBtn').disabled = false;
-        document.getElementById('reloadBtn').disabled = false;
-        
-        showMessage(`✅ Calibrated! Tag ID: ${playerTagId}`, 'success');
+        // Update lobby menu with player info
+        document.getElementById('lobbyPlayerName').innerText = playerName;
+        document.getElementById('lobbyTagId').innerText = playerTagId;
         
     } else {
         const calibrationMessage = document.getElementById('calibrationMessage');
@@ -323,4 +361,187 @@ function resetGame() {
     document.getElementById('shootBtn').disabled = false;
     document.getElementById('cameraView').style.filter = 'none';
     showMessage('🎮 Game Reset!', 'success');
+}
+
+// ===== LOBBY FUNCTIONS =====
+
+function hostGame() {
+    console.log('Host game clicked');
+    console.log('Socket connected?', socket && socket.connected);
+    console.log('Player ID:', playerId);
+    console.log('Player Name:', playerName);
+    
+    if (!socket || !socket.connected) {
+        alert('Not connected to server! Please refresh and try again.');
+        return;
+    }
+    
+    socket.emit('create_room', {
+        player_id: playerId,
+        player_name: playerName
+    });
+    
+    console.log('Create room event sent');
+}
+
+function handleRoomCreated(data) {
+    currentRoomCode = data.room_code;
+    isHost = true;
+    
+    showScreen('hostGameScreen');
+    document.getElementById('roomCodeDisplay').innerText = currentRoomCode;
+    
+    updatePlayersList(data.players);
+    
+    console.log(`🏠 Created room: ${currentRoomCode}`);
+}
+
+function joinRoom() {
+    const roomCode = document.getElementById('roomCodeInput').value.trim().toUpperCase();
+    
+    if (roomCode.length !== 4) {
+        document.getElementById('joinMessage').innerText = '❌ Code must be 4 letters';
+        return;
+    }
+    
+    socket.emit('join_room', {
+        player_id: playerId,
+        player_name: playerName,
+        room_code: roomCode
+    });
+}
+
+function handleRoomJoined(data) {
+    currentRoomCode = data.room_code;
+    isHost = false;
+    
+    showScreen('waitingRoomScreen');
+    document.getElementById('waitingRoomCode').innerText = currentRoomCode;
+    
+    updateWaitingPlayersList(data.players);
+    
+    console.log(`🚪 Joined room: ${currentRoomCode}`);
+}
+
+function handleRoomUpdated(data) {
+    if (isHost) {
+        updatePlayersList(data.players);
+    } else {
+        updateWaitingPlayersList(data.players);
+    }
+}
+
+function handleRoomError(data) {
+    if (document.getElementById('joinGameScreen').classList.contains('active')) {
+        document.getElementById('joinMessage').innerText = `❌ ${data.error}`;
+    } else {
+        alert(data.error);
+    }
+}
+
+function startGame() {
+    socket.emit('start_game', {
+        room_code: currentRoomCode,
+        player_id: playerId
+    });
+}
+
+function handleGameStarted(data) {
+    // Transition to game screen
+    showScreen('gameScreen');
+    
+    // Set up game video
+    const gameVideo = document.getElementById('cameraView');
+    gameVideo.srcObject = cameraStream;
+    
+    // Update UI
+    document.getElementById('playerNameDisplay').innerText = playerName;
+    document.getElementById('tagId').innerText = playerTagId;
+    document.getElementById('shootBtn').disabled = false;
+    document.getElementById('reloadBtn').disabled = false;
+    
+    showMessage('🎮 Game Started!', 'success');
+}
+
+function cancelHost() {
+    leaveRoom();
+    showScreen('lobbyMenuScreen');
+}
+
+function leaveRoom() {
+    if (currentRoomCode) {
+        socket.emit('leave_room', {
+            room_code: currentRoomCode,
+            player_id: playerId
+        });
+        
+        currentRoomCode = null;
+        isHost = false;
+    }
+    
+    showScreen('lobbyMenuScreen');
+}
+
+function handleRoomClosed(data) {
+    if (currentRoomCode === data.room_code) {
+        alert('Room has been closed by the host');
+        showScreen('lobbyMenuScreen');
+        currentRoomCode = null;
+        isHost = false;
+    }
+}
+
+function updatePlayersList(players) {
+    const container = document.getElementById('playersListContainer');
+    const count = document.getElementById('playerCountLobby');
+    
+    container.innerHTML = '';
+    count.innerText = Object.keys(players).length;
+    
+    for (const [pid, player] of Object.entries(players)) {
+        const playerDiv = document.createElement('div');
+        playerDiv.className = 'player-item' + (pid === playerId ? ' host' : '');
+        
+        playerDiv.innerHTML = `
+            <div class="player-icon">👤</div>
+            <div class="player-details">
+                <div class="player-name">${player.name}</div>
+                <div class="player-tag">Tag ID: ${player.tag_id || '?'}</div>
+            </div>
+            ${pid === playerId ? '<span class="host-badge">HOST</span>' : ''}
+        `;
+        
+        container.appendChild(playerDiv);
+    }
+    
+    // Enable start button if at least 2 players
+    const startBtn = document.getElementById('startGameBtn');
+    if (Object.keys(players).length >= 2) {
+        startBtn.disabled = false;
+    } else {
+        startBtn.disabled = true;
+    }
+}
+
+function updateWaitingPlayersList(players) {
+    const container = document.getElementById('waitingPlayersListContainer');
+    const count = document.getElementById('waitingPlayerCount');
+    
+    container.innerHTML = '';
+    count.innerText = Object.keys(players).length;
+    
+    for (const [pid, player] of Object.entries(players)) {
+        const playerDiv = document.createElement('div');
+        playerDiv.className = 'player-item' + (player.name === playerName ? ' host' : '');
+        
+        playerDiv.innerHTML = `
+            <div class="player-icon">👤</div>
+            <div class="player-details">
+                <div class="player-name">${player.name}</div>
+                <div class="player-tag">Tag ID: ${player.tag_id || '?'}</div>
+            </div>
+        `;
+        
+        container.appendChild(playerDiv);
+    }
 }
