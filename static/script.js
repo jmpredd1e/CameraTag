@@ -206,12 +206,18 @@ async function calibrateTag() {
     try {
         const video = document.getElementById('calibrationVideo');
         const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0);
         
-        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+        // Resize image to reduce processing time (smaller = faster)
+        const maxWidth = 640;
+        const scale = maxWidth / video.videoWidth;
+        canvas.width = maxWidth;
+        canvas.height = video.videoHeight * scale;
+        
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Lower quality = faster upload and processing
+        const imageData = canvas.toDataURL('image/jpeg', 0.5);
         
         socket.emit('detect_tag', {
             image: imageData,
@@ -296,12 +302,18 @@ async function shootLaser() {
     try {
         const video = document.getElementById('cameraView');
         const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0);
         
-        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+        // Resize for faster detection
+        const maxWidth = 640;
+        const scale = maxWidth / video.videoWidth;
+        canvas.width = maxWidth;
+        canvas.height = video.videoHeight * scale;
+        
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Lower quality for speed
+        const imageData = canvas.toDataURL('image/jpeg', 0.5);
         
         socket.emit('detect_tag', {
             image: imageData,

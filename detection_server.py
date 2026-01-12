@@ -202,8 +202,21 @@ def handle_detect_tag(data):
             })
             return
         
+        # Resize image if too large for faster processing
+        max_dimension = 800
+        height, width = img.shape[:2]
+        if max(height, width) > max_dimension:
+            scale = max_dimension / max(height, width)
+            new_width = int(width * scale)
+            new_height = int(height * scale)
+            img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_AREA)
+        
         # Convert to grayscale for better detection
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # Apply adaptive threshold to improve detection in varying lighting
+        gray = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                     cv2.THRESH_BINARY, 11, 2)
         
         # Detect April Tags using OpenCV's ArUco detector
         corners, ids, rejected = detector.detectMarkers(gray)
