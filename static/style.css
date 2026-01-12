@@ -91,6 +91,30 @@ body {
   color: rgba(255, 255, 255, 0.3);
 }
 
+/* Manual tag input styling */
+#manualTagIdInput:focus {
+  outline: none;
+  border-color: #ffaa00;
+  box-shadow: 0 0 20px rgba(255, 170, 0, 0.3);
+}
+
+#manualTagIdInput::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* Remove number input arrows */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* Buttons */
 .primary-btn {
   width: 100%;

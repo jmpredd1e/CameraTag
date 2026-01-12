@@ -203,6 +203,14 @@ async function calibrateTag() {
     calibrateBtn.innerText = '📸 SCANNING...';
     calibrationMessage.innerText = 'Detecting tag...';
     
+    // Show manual input option after 5 seconds
+    const manualInputTimeout = setTimeout(() => {
+        showManualTagInput();
+    }, 5000);
+    
+    // Store timeout ID so we can cancel it if tag is detected
+    window.calibrationTimeout = manualInputTimeout;
+    
     try {
         const video = document.getElementById('calibrationVideo');
         const canvas = document.createElement('canvas');
@@ -230,12 +238,120 @@ async function calibrateTag() {
         calibrationMessage.innerText = '❌ Error capturing image. Try again.';
         calibrateBtn.disabled = false;
         calibrateBtn.innerText = '📸 Scan My Tag';
+        clearTimeout(window.calibrationTimeout);
     }
+}
+
+function showManualTagInput() {
+    const calibrationCard = document.querySelector('.calibration-card');
+    
+    // Check if manual input already exists
+    if (document.getElementById('manualTagInput')) {
+        return;
+    }
+    
+    const manualInputDiv = document.createElement('div');
+    manualInputDiv.id = 'manualTagInput';
+    manualInputDiv.style.cssText = `
+        margin-top: 20px;
+        padding: 20px;
+        background: rgba(255, 170, 0, 0.1);
+        border: 2px solid #ffaa00;
+        border-radius: 10px;
+        animation: fadeIn 0.5s;
+    `;
+    
+    manualInputDiv.innerHTML = `
+        <style>
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(-10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+        </style>
+        <h3 style="color: #ffaa00; text-align: center; margin-bottom: 15px; font-size: 18px;">
+            ⏱️ Manual Entry
+        </h3>
+        <p style="color: #888; text-align: center; margin-bottom: 15px; font-size: 14px;">
+            Having trouble scanning? Enter your tag ID manually:
+        </p>
+        <input type="number" 
+               id="manualTagIdInput" 
+               placeholder="Enter Tag ID (0-50)"
+               min="0"
+               max="50"
+               style="
+                   width: 100%;
+                   padding: 15px;
+                   font-size: 18px;
+                   text-align: center;
+                   border: 2px solid #ffaa00;
+                   border-radius: 10px;
+                   background: rgba(255, 255, 255, 0.05);
+                   color: white;
+                   margin-bottom: 10px;
+               ">
+        <button id="submitManualTagBtn" style="
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            background: #ffaa00;
+            color: black;
+            cursor: pointer;
+            transition: all 0.3s;
+        " onmouseover="this.style.background='#ff9900'" 
+           onmouseout="this.style.background='#ffaa00'">
+            ✓ Confirm Tag ID
+        </button>
+    `;
+    
+    calibrationCard.appendChild(manualInputDiv);
+    
+    // Add event listener for submit button
+    document.getElementById('submitManualTagBtn').addEventListener('click', submitManualTag);
+    
+    // Allow Enter key to submit
+    document.getElementById('manualTagIdInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            submitManualTag();
+        }
+    });
+}
+
+function submitManualTag() {
+    const tagIdInput = document.getElementById('manualTagIdInput');
+    const tagId = parseInt(tagIdInput.value);
+    
+    if (isNaN(tagId) || tagId < 0 || tagId > 50) {
+        alert('Please enter a valid tag ID between 0 and 50');
+        return;
+    }
+    
+    console.log('Manual tag entry:', tagId);
+    
+    // Send registration directly to server
+    socket.emit('register_player', {
+        player_id: playerId,
+        player_name: playerName,
+        tag_id: tagId
+    });
+    
+    // Disable inputs
+    tagIdInput.disabled = true;
+    document.getElementById('submitManualTagBtn').disabled = true;
+    document.getElementById('submitManualTagBtn').innerText = 'Processing...';
 }
 
 function handleDetectionResult(data) {
     if (data.success && data.detections.length > 0) {
         const tag = data.detections[0];
+        
+        // Cancel manual input timeout since tag was detected
+        if (window.calibrationTimeout) {
+            clearTimeout(window.calibrationTimeout);
+        }
         
         if (!isCalibrated) {
             // Register player with this tag
@@ -269,6 +385,17 @@ function handleRegistrationResult(data) {
         isCalibrated = true;
         playerTagId = data.player_data.tag_id;
         
+        // Clear any timeouts
+        if (window.calibrationTimeout) {
+            clearTimeout(window.calibrationTimeout);
+        }
+        
+        // Remove manual input if it exists
+        const manualInput = document.getElementById('manualTagInput');
+        if (manualInput) {
+            manualInput.remove();
+        }
+        
         // Move to lobby menu instead of game screen
         showScreen('lobbyMenuScreen');
         
@@ -281,6 +408,13 @@ function handleRegistrationResult(data) {
         calibrationMessage.innerText = `❌ ${data.error}`;
         document.getElementById('calibrateBtn').disabled = false;
         document.getElementById('calibrateBtn').innerText = '📸 Scan My Tag';
+        
+        // Re-enable manual input if it exists
+        const manualTagBtn = document.getElementById('submitManualTagBtn');
+        const manualTagInput = document.getElementById('manualTagIdInput');
+        if (manualTagBtn) manualTagBtn.disabled = false;
+        if (manualTagInput) manualTagInput.disabled = false;
+        if (manualTagBtn) manualTagBtn.innerText = '✓ Confirm Tag ID';
     }
 }
 
