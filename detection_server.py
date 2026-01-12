@@ -48,6 +48,11 @@ def home():
     """Home route - serves the game interface from templates folder"""
     return render_template('index.html')
 
+@app.route('/admin')
+def admin_page():
+    """Admin route - same interface but can access admin panel"""
+    return render_template('index.html')
+
 @app.route('/status')
 def status():
     """Server status page"""
@@ -641,6 +646,64 @@ def handle_reset_game():
     socketio.emit('game_reset', {
         'message': 'Game has been reset',
         'timestamp': datetime.now().isoformat()
+    })
+
+@socketio.on('get_admin_stats')
+def handle_get_admin_stats():
+    """Get admin statistics"""
+    emit('admin_stats', {
+        'total_players': len(player_registry),
+        'total_rooms': len(game_rooms),
+        'connected_clients': connected_clients
+    })
+
+@socketio.on('admin_reset_all_tags')
+def handle_admin_reset_all_tags(data):
+    """Admin: Reset all player tags and force recalibration"""
+    admin_code = data.get('admin_code')
+    
+    if admin_code != '8117':
+        emit('room_error', {'error': 'Invalid admin code'})
+        return
+    
+    print("🔐 ADMIN: Resetting all player tags")
+    
+    # Clear all player registrations
+    player_registry.clear()
+    
+    # Force all connected clients to recalibrate
+    socketio.emit('force_recalibrate', {
+        'message': 'Admin has reset all tags. Please recalibrate.'
+    })
+    
+    emit('admin_action_success', {
+        'message': 'All tags have been reset'
+    })
+
+@socketio.on('admin_close_all_rooms')
+def handle_admin_close_all_rooms(data):
+    """Admin: Close all game rooms"""
+    admin_code = data.get('admin_code')
+    
+    if admin_code != '8117':
+        emit('room_error', {'error': 'Invalid admin code'})
+        return
+    
+    print("🔐 ADMIN: Closing all rooms")
+    
+    # Get list of room codes to close
+    room_codes = list(game_rooms.keys())
+    
+    # Close each room
+    for room_code in room_codes:
+        socketio.emit('room_closed', {'room_code': room_code}, room=room_code)
+        print(f"🗑️  Closed room {room_code}")
+    
+    # Clear all rooms
+    game_rooms.clear()
+    
+    emit('admin_action_success', {
+        'message': f'Closed {len(room_codes)} room(s)'
     })
 
 if __name__ == '__main__':

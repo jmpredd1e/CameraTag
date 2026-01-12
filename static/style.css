@@ -51,7 +51,7 @@ body {
 }
 
 /* Welcome Card */
-.welcome-card, .calibration-card, .lobby-menu-card, .join-card, .host-card, .waiting-card {
+.welcome-card, .calibration-card, .lobby-menu-card, .join-card, .host-card, .waiting-card, .admin-card, .admin-login-card {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 20px;
@@ -61,7 +61,7 @@ body {
   backdrop-filter: blur(10px);
 }
 
-.welcome-card h2, .calibration-card h2, .lobby-menu-card h2, .join-card h2, .host-card h2, .waiting-card h2 {
+.welcome-card h2, .calibration-card h2, .lobby-menu-card h2, .join-card h2, .host-card h2, .waiting-card h2, .admin-card h2, .admin-login-card h2 {
   font-size: 24px;
   margin-bottom: 20px;
   text-align: center;
@@ -368,6 +368,102 @@ body {
 .waiting-status p {
   color: #888;
   font-size: 16px;
+}
+
+/* Admin Panel */
+.admin-card {
+  max-width: 600px;
+}
+
+.admin-stats {
+  margin-bottom: 30px;
+  padding: 20px;
+  background: rgba(0, 255, 136, 0.05);
+  border: 1px solid rgba(0, 255, 136, 0.2);
+  border-radius: 10px;
+}
+
+.admin-stats h3 {
+  color: #00ff88;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-item .stat-label {
+  color: #888;
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+
+.stat-item .stat-value {
+  color: #00ff88;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.admin-actions {
+  margin-bottom: 20px;
+}
+
+.admin-actions h3 {
+  color: white;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.admin-action-btn {
+  width: 100%;
+  padding: 18px;
+  font-size: 18px;
+  font-weight: bold;
+  border: 2px solid #00ff88;
+  border-radius: 12px;
+  background: transparent;
+  color: #00ff88;
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: all 0.3s;
+}
+
+.admin-action-btn:hover {
+  background: rgba(0, 255, 136, 0.1);
+  transform: translateY(-2px);
+}
+
+.admin-action-btn.danger {
+  border-color: #ff4444;
+  color: #ff4444;
+}
+
+.admin-action-btn.danger:hover {
+  background: rgba(255, 68, 68, 0.1);
+}
+
+.admin-action-btn.warning {
+  border-color: #ffaa00;
+  color: #ffaa00;
+}
+
+.admin-action-btn.warning:hover {
+  background: rgba(255, 170, 0, 0.1);
+}
+
+.error-text {
+  color: #ff4444 !important;
+}
+
+.admin-login-card {
+  max-width: 400px;
 }
 
 .info-text {

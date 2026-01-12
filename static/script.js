@@ -75,6 +75,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // Waiting room button
     document.getElementById('leaveRoomBtn').addEventListener('click', leaveRoom);
     
+    // Admin buttons
+    document.getElementById('secretAdminBtn').addEventListener('click', () => showScreen('adminLoginScreen'));
+    document.getElementById('adminLoginBtn').addEventListener('click', adminLogin);
+    document.getElementById('backFromAdminLogin').addEventListener('click', () => showScreen('welcomeScreen'));
+    document.getElementById('exitAdminBtn').addEventListener('click', () => showScreen('welcomeScreen'));
+    document.getElementById('resetAllTagsBtn').addEventListener('click', resetAllTags);
+    document.getElementById('closeAllRoomsBtn').addEventListener('click', closeAllRooms);
+    document.getElementById('refreshStatsBtn').addEventListener('click', refreshAdminStats);
+    
     // Shoot button
     document.getElementById('shootBtn').addEventListener('click', shootLaser);
     
@@ -172,6 +181,17 @@ function initializeSocket() {
     socket.on('game_draw', function(data) {
         console.log('Game draw event received:', data);
         handleGameDraw(data);
+    });
+    
+    // Admin events
+    socket.on('admin_stats', function(data) {
+        console.log('Admin stats received:', data);
+        updateAdminStats(data);
+    });
+    
+    socket.on('force_recalibrate', function() {
+        console.log('Force recalibrate received');
+        handleForceRecalibrate();
     });
 }
 
@@ -799,4 +819,81 @@ function updateWaitingPlayersList(players) {
         
         container.appendChild(playerDiv);
     }
+}
+
+// ===== ADMIN FUNCTIONS =====
+
+function adminLogin() {
+    const code = document.getElementById('adminCodeInput').value;
+    const errorText = document.getElementById('adminLoginError');
+    
+    if (code === '8117') {
+        // Correct code
+        errorText.innerText = '';
+        showScreen('adminScreen');
+        
+        // Initialize socket if not already connected
+        if (!socket) {
+            initializeSocket();
+        }
+        
+        // Request admin stats
+        refreshAdminStats();
+    } else {
+        errorText.innerText = '❌ Invalid admin code';
+        document.getElementById('adminCodeInput').value = '';
+    }
+}
+
+function refreshAdminStats() {
+    if (socket && socket.connected) {
+        socket.emit('get_admin_stats');
+    }
+}
+
+function updateAdminStats(data) {
+    document.getElementById('adminPlayerCount').innerText = data.total_players || 0;
+    document.getElementById('adminRoomCount').innerText = data.total_rooms || 0;
+    document.getElementById('adminConnectedCount').innerText = data.connected_clients || 0;
+}
+
+function resetAllTags() {
+    if (!confirm('Are you sure you want to reset all player tags? This will force everyone to recalibrate.')) {
+        return;
+    }
+    
+    socket.emit('admin_reset_all_tags', {
+        admin_code: '8117'
+    });
+    
+    alert('All tags have been reset. Players will be sent to recalibration.');
+}
+
+function closeAllRooms() {
+    if (!confirm('Are you sure you want to close all active rooms?')) {
+        return;
+    }
+    
+    socket.emit('admin_close_all_rooms', {
+        admin_code: '8117'
+    });
+    
+    alert('All rooms have been closed.');
+}
+
+function handleForceRecalibrate() {
+    alert('Admin has reset all tags. You must recalibrate.');
+    
+    // Reset player state
+    isCalibrated = false;
+    playerTagId = null;
+    
+    // Clear any overlays
+    const overlay = document.getElementById('gameOverOverlay') || document.getElementById('victoryOverlay');
+    if (overlay) {
+        overlay.remove();
+    }
+    
+    // Go back to calibration screen
+    showScreen('calibrationScreen');
 }
