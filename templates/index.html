@@ -33,6 +33,18 @@
                 <p class="info-text">
                     Camera access is required for gameplay detection
                 </p>
+                
+                <!-- Secret admin button -->
+                <div style="text-align: center; margin-top: 30px;">
+                    <button style="
+                        background: none;
+                        border: none;
+                        color: #333;
+                        font-size: 10px;
+                        cursor: pointer;
+                        opacity: 0.3;
+                    " id="secretAdminBtn">🔐</button>
+                </div>
             </div>
         </div>
     </div>
@@ -191,6 +203,88 @@
                 <button class="danger-btn" id="leaveRoomBtn">
                     ← Leave Room
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Screen - NEW! -->
+    <div id="adminScreen" class="screen">
+        <div class="container">
+            <div class="header">
+                <h1>🔐 Admin Panel</h1>
+                <p>System Control</p>
+            </div>
+            
+            <div class="admin-card">
+                <div class="admin-stats">
+                    <h3>Server Statistics</h3>
+                    <div class="stat-grid">
+                        <div class="stat-item">
+                            <div class="stat-label">Registered Players</div>
+                            <div class="stat-value" id="adminPlayerCount">0</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Active Rooms</div>
+                            <div class="stat-value" id="adminRoomCount">0</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Connected Clients</div>
+                            <div class="stat-value" id="adminConnectedCount">0</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="admin-actions">
+                    <h3>Admin Actions</h3>
+                    
+                    <button class="admin-action-btn danger" id="resetAllTagsBtn">
+                        🔄 Reset All Tags
+                    </button>
+                    <p class="info-text">Forces all players to recalibrate their tags</p>
+                    
+                    <button class="admin-action-btn warning" id="closeAllRoomsBtn">
+                        🚪 Close All Rooms
+                    </button>
+                    <p class="info-text">Closes all active game rooms</p>
+                    
+                    <button class="admin-action-btn" id="refreshStatsBtn">
+                        📊 Refresh Stats
+                    </button>
+                </div>
+                
+                <button class="back-btn" id="exitAdminBtn">
+                    ← Exit Admin Panel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Login Screen - NEW! -->
+    <div id="adminLoginScreen" class="screen">
+        <div class="container">
+            <div class="header">
+                <h1>🔐 Admin Access</h1>
+                <p>Enter Admin Code</p>
+            </div>
+            
+            <div class="admin-login-card">
+                <h2>Admin Code Required</h2>
+                
+                <input type="password" 
+                       class="code-input" 
+                       id="adminCodeInput" 
+                       placeholder="****"
+                       maxlength="4">
+                
+                <button class="primary-btn" id="adminLoginBtn">
+                    Unlock Admin Panel
+                </button>
+                
+                <button class="back-btn" id="backFromAdminLogin">
+                    ← Back
+                </button>
+                
+                <p class="info-text error-text" id="adminLoginError"></p>
             </div>
         </div>
     </div>
