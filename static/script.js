@@ -6,6 +6,8 @@ let playerId = null;
 let playerName = null;
 let playerTagId = null;
 let isCalibrated = false;
+let currentRoomCode = null;
+let isHost = false;
 let ammoCount = 30;
 let healthCount = 100;
 let hitsCount = 0;
@@ -160,6 +162,17 @@ function initializeSocket() {
         console.log('Room closed event received:', data);
         handleRoomClosed(data);
     });
+    
+    // Game end events
+    socket.on('game_won', function(data) {
+        console.log('Game won event received:', data);
+        handleGameWon(data);
+    });
+    
+    socket.on('game_draw', function(data) {
+        console.log('Game draw event received:', data);
+        handleGameDraw(data);
+    });
 }
 
 async function calibrateTag() {
@@ -302,22 +315,261 @@ function handleShotConfirmed(data) {
 }
 
 function handlePlayerHit(data) {
+    // Always deduct HP when hit
     healthCount -= 25;
     updateStats();
+    
+    console.log(`Hit! Current HP: ${healthCount}`);
     
     showMessage(`💥 HIT by ${data.shooter_id}!`, 'error');
     
     // Flash screen red
-    document.getElementById('cameraView').style.filter = 'hue-rotate(90deg) brightness(0.7)';
+    const cameraView = document.getElementById('cameraView');
+    cameraView.style.filter = 'brightness(2) saturate(2) hue-rotate(320deg)';
     setTimeout(() => {
-        document.getElementById('cameraView').style.filter = 'none';
-    }, 500);
+        cameraView.style.filter = 'none';
+    }, 200);
     
+    // Flash again
+    setTimeout(() => {
+        cameraView.style.filter = 'brightness(2) saturate(2) hue-rotate(320deg)';
+    }, 400);
+    setTimeout(() => {
+        cameraView.style.filter = 'none';
+    }, 600);
+    
+    // Check if player is eliminated
     if (healthCount <= 0) {
-        document.getElementById('shootBtn').disabled = true;
-        document.getElementById('cameraView').style.filter = 'grayscale(100%) brightness(0.5)';
-        showMessage('💀 YOU ARE ELIMINATED!', 'error');
+        healthCount = 0;
+        updateStats();
+        
+        // Notify server we're eliminated
+        socket.emit('player_eliminated', {
+            player_id: playerId,
+            room_code: currentRoomCode
+        });
+        
+        // Show game over screen
+        showGameOver();
     }
+}
+
+function showGameOver() {
+    // Disable shooting
+    document.getElementById('shootBtn').disabled = true;
+    document.getElementById('reloadBtn').disabled = true;
+    
+    // Create game over overlay
+    const gameScreen = document.getElementById('gameScreen');
+    
+    const overlay = document.createElement('div');
+    overlay.id = 'gameOverOverlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.95);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        animation: fadeIn 1s;
+    `;
+    
+    overlay.innerHTML = `
+        <style>
+            @keyframes fadeIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            @keyframes pulse {
+                0%, 100% { transform: scale(1); }
+                50% { transform: scale(1.05); }
+            }
+        </style>
+        <h1 style="
+            color: #ff0000;
+            font-size: 72px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 30px rgba(255, 0, 0, 0.8);
+            animation: pulse 2s infinite;
+        ">ELIMINATED</h1>
+        <p style="
+            color: white;
+            font-size: 24px;
+            margin-bottom: 30px;
+        ">You have been eliminated!</p>
+        <div style="
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            margin-bottom: 30px;
+        ">
+            <div style="color: #888; font-size: 18px; margin-bottom: 10px;">Final Stats</div>
+            <div style="color: #00ff88; font-size: 32px; font-weight: bold; margin: 10px 0;">
+                ${hitsCount} Hits
+            </div>
+            <div style="color: #888; font-size: 18px;">
+                ${shotsFiredCount} Shots Fired
+            </div>
+        </div>
+        <button id="returnToLobbyBtn" style="
+            padding: 20px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            border: 2px solid #00ff88;
+            border-radius: 12px;
+            background: transparent;
+            color: #00ff88;
+            cursor: pointer;
+            transition: all 0.3s;
+        " onmouseover="this.style.background='rgba(0,255,136,0.2)'" 
+           onmouseout="this.style.background='transparent'"
+           onclick="returnToLobby()">
+            Return to Lobby
+        </button>
+    `;
+    
+    gameScreen.appendChild(overlay);
+}
+
+function showVictory() {
+    // Disable shooting
+    document.getElementById('shootBtn').disabled = true;
+    document.getElementById('reloadBtn').disabled = true;
+    
+    // Create victory overlay
+    const gameScreen = document.getElementById('gameScreen');
+    
+    const overlay = document.createElement('div');
+    overlay.id = 'victoryOverlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: linear-gradient(135deg, rgba(0, 255, 136, 0.1) 0%, rgba(0, 0, 0, 0.95) 100%);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        animation: fadeIn 1s;
+    `;
+    
+    overlay.innerHTML = `
+        <style>
+            @keyframes fadeIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            @keyframes bounce {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-20px); }
+            }
+            @keyframes glow {
+                0%, 100% { text-shadow: 0 0 20px rgba(0, 255, 136, 0.8); }
+                50% { text-shadow: 0 0 40px rgba(0, 255, 136, 1), 0 0 60px rgba(0, 255, 136, 0.8); }
+            }
+        </style>
+        <div style="font-size: 100px; margin-bottom: 20px; animation: bounce 1s infinite;">🏆</div>
+        <h1 style="
+            color: #00ff88;
+            font-size: 72px;
+            margin-bottom: 20px;
+            animation: glow 2s infinite;
+        ">YOU WIN!</h1>
+        <p style="
+            color: white;
+            font-size: 28px;
+            margin-bottom: 30px;
+        ">Victory Royale!</p>
+        <div style="
+            background: rgba(0, 255, 136, 0.1);
+            border: 2px solid #00ff88;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            margin-bottom: 30px;
+        ">
+            <div style="color: #888; font-size: 18px; margin-bottom: 10px;">Final Stats</div>
+            <div style="color: #00ff88; font-size: 32px; font-weight: bold; margin: 10px 0;">
+                ${hitsCount} Hits
+            </div>
+            <div style="color: #888; font-size: 18px;">
+                ${shotsFiredCount} Shots Fired
+            </div>
+            <div style="color: #888; font-size: 18px;">
+                HP Remaining: ${healthCount}
+            </div>
+        </div>
+        <button id="returnToLobbyBtn" style="
+            padding: 20px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            border: 2px solid #00ff88;
+            border-radius: 12px;
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+            cursor: pointer;
+            transition: all 0.3s;
+        " onmouseover="this.style.background='rgba(0,255,136,0.3)'" 
+           onmouseout="this.style.background='rgba(0,255,136,0.2)'"
+           onclick="returnToLobby()">
+            Return to Lobby
+        </button>
+    `;
+    
+    gameScreen.appendChild(overlay);
+}
+
+function handleGameWon(data) {
+    if (data.winner_id === playerId) {
+        // You won!
+        showVictory();
+    }
+    // If not the winner, they're already eliminated and see the eliminated screen
+}
+
+function handleGameDraw(data) {
+    alert(data.message);
+    returnToLobby();
+}
+
+function returnToLobby() {
+    // Remove overlay if it exists
+    const overlay = document.getElementById('gameOverOverlay') || document.getElementById('victoryOverlay');
+    if (overlay) {
+        overlay.remove();
+    }
+    
+    // Leave the room
+    if (currentRoomCode) {
+        socket.emit('leave_room', {
+            room_code: currentRoomCode,
+            player_id: playerId
+        });
+    }
+    
+    // Reset game state
+    currentRoomCode = null;
+    isHost = false;
+    healthCount = 100;
+    ammoCount = 30;
+    hitsCount = 0;
+    shotsFiredCount = 0;
+    
+    // Re-enable buttons
+    document.getElementById('shootBtn').disabled = false;
+    document.getElementById('reloadBtn').disabled = false;
+    
+    // Return to lobby menu
+    showScreen('lobbyMenuScreen');
 }
 
 function reloadWeapon() {
@@ -362,6 +614,9 @@ function resetGame() {
     document.getElementById('cameraView').style.filter = 'none';
     showMessage('🎮 Game Reset!', 'success');
 }
+
+// Make returnToLobby globally accessible for onclick
+window.returnToLobby = returnToLobby;
 
 // ===== LOBBY FUNCTIONS =====
 

@@ -515,25 +515,24 @@ def handle_shoot(data):
             hit_player_id = pid
             hit_player_name = pdata['name']
             
-            # Mark player as hit
+            # Always send hit notification (even if already dead)
+            # Let the client handle HP deduction
+            print(f"💥 {hit_player_name} was hit!")
+            
+            # Update shooter's kills only if target is still alive
             if pdata['alive']:
-                pdata['alive'] = False
-                
-                # Update shooter's kills
-                if player_id in player_registry:
-                    player_registry[player_id]['kills'] += 1
-                
-                print(f"💀 {hit_player_name} has been eliminated!")
-                
-                # Notify the hit player
-                socketio.emit('player_hit', {
-                    'player_id': hit_player_id,
-                    'player_name': hit_player_name,
-                    'shooter_id': player_id,
-                    'timestamp': timestamp
-                })
-            else:
-                print(f"⚠️  {hit_player_name} already eliminated")
+                # Check if this hit will kill them
+                # Client tracks HP, but we track alive/dead state
+                # We'll let client tell us when player dies via a new event
+                pass
+            
+            # Notify the hit player
+            socketio.emit('player_hit', {
+                'player_id': hit_player_id,
+                'player_name': hit_player_name,
+                'shooter_id': player_id,
+                'timestamp': timestamp
+            })
             
             break
     
@@ -560,6 +559,60 @@ def handle_shoot(data):
             'shots_fired': 3,
             'timestamp': timestamp
         })
+
+@socketio.on('player_eliminated')
+def handle_player_eliminated(data):
+    """Handle when a player's HP reaches 0"""
+    player_id = data.get('player_id')
+    room_code = data.get('room_code')
+    
+    if player_id in player_registry:
+        player_registry[player_id]['alive'] = False
+        player_name = player_registry[player_id]['name']
+        print(f"💀 {player_name} has been eliminated!")
+        
+        # Notify all players
+        socketio.emit('player_died', {
+            'player_id': player_id,
+            'player_name': player_name
+        })
+        
+        # Check if there's a winner (only 1 player alive in room)
+        if room_code and room_code in game_rooms:
+            room = game_rooms[room_code]
+            alive_players = []
+            
+            for pid, pdata in room['players'].items():
+                if pid in player_registry and player_registry[pid]['alive']:
+                    alive_players.append({
+                        'id': pid,
+                        'name': pdata['name']
+                    })
+            
+            print(f"🎮 Players alive in room {room_code}: {len(alive_players)}")
+            
+            # If only 1 player left alive, they win!
+            if len(alive_players) == 1:
+                winner = alive_players[0]
+                print(f"🏆 {winner['name']} wins room {room_code}!")
+                
+                # Update room status
+                room['status'] = 'finished'
+                
+                # Notify winner
+                socketio.emit('game_won', {
+                    'winner_id': winner['id'],
+                    'winner_name': winner['name']
+                }, room=room_code)
+            
+            # If no players alive (tie/last two eliminated each other)
+            elif len(alive_players) == 0:
+                print(f"🤝 Draw in room {room_code}!")
+                room['status'] = 'finished'
+                
+                socketio.emit('game_draw', {
+                    'message': 'Game ended in a draw!'
+                }, room=room_code)
 
 @socketio.on('get_game_state')
 def handle_get_game_state():
